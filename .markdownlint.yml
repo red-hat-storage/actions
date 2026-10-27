@@ -1,0 +1,4 @@
+---
+default: true
+# Keep prose and tables readable without requiring hard line wrapping.
+MD013: false

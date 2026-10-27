@@ -1,0 +1,13 @@
+---
+extends: default
+
+ignore: |
+  .git/
+
+rules:
+  document-start: disable
+  line-length:
+    max: 120
+  truthy:
+    # GitHub Actions uses "on" as the workflow trigger key.
+    check-keys: false
