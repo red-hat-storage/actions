@@ -1,0 +1,339 @@
+---
+name: Go patch version bump
+description: >-
+  Bump the Go version of a repository across one or more branches to match a
+  container builder image (or a pinned version), run the module update, and
+  open or refresh one pull request per branch.
+author: red-hat-storage
+
+branding:
+  icon: arrow-up-circle
+  color: blue
+
+inputs:
+  # branches config
+  branches:
+    description: >-
+      Branches to process, one per line (or whitespace separated). Each entry
+      is "<branch>", "<branch>:<builder-image-tag>" or "<branch>:=<x.y.z>".
+      A bare branch uses `default-go-tag` input. A value starting with "="
+      pins that version and skips the image probe.
+      Example:
+        devel:rhel_9_golang_1.26 -- probe the image, use its version label.
+        release-4.22:1.25 -- a tag too, probed: "1.25" is the tag here.
+        release-4.21:=1.25.3 -- pinned, no image probe at all.
+        release-4.18 -- It will use default-go-tag from below.
+    required: true
+  default-go-tag:
+    description: >-
+      Builder image tag (or "=x.y.z" pinned version) used for branch entries
+      that do not carry their own value. A pinned value is used without any
+      image probes.
+    required: false
+    default: ""
+  fail-fast:
+    description: Stop at the first branch that fails instead of continuing.
+    required: false
+    default: "false"
+
+  # Version source config
+  builder-image-template:
+    description: >-
+      Image reference used to discover the Go version. `{tag}` is replaced by
+      the branch's builder image tag. The version is read from the image's
+      `version` label via `skopeo inspect`.
+    required: false
+    default: brew.registry.redhat.io/rh-osbs/openshift-golang-builder:{tag}
+  registry:
+    description: >-
+      Registry to log in to before probing the builder image. Login is skipped
+      when `registry-username` is empty.
+    required: false
+    default: brew.registry.redhat.io
+  registry-username:
+    description: Registry service account username.
+    required: false
+    default: ""
+  registry-password:
+    description: Registry service account password.
+    required: false
+    default: ""
+  image-version-label:
+    description: Image label holding the Go version.
+    required: false
+    default: version
+
+  # Repo configs
+  target-repo:
+    description: Repository that receives the pull requests (owner/name).
+    required: false
+    default: ${{ github.repository }}
+  fork-repo:
+    description: >-
+      Fork that receives the bump branches (owner/name). Leave empty to push
+      the branches straight to `target-repo`, in which case `token` needs
+      contents write on it.
+    required: false
+    default: ""
+  default-branch:
+    description: >-
+      Branch treated as the main/dev branch. Its pull requests use
+      `pr-title-template`; every other branch uses `release-pr-title-template`.
+    required: false
+    default: ${{ github.event.repository.default_branch }}
+
+  # Secret stuff.
+  token:
+    description: >-
+      Token used to push the bump branch (needs contents write, plus workflows
+      write when the bump can touch files under .github/workflows). This is
+      normally a PAT for the bot that owns `fork-repo`.
+    required: true
+  pr-token:
+    description: >-
+      Token used to create and update the pull requests on `target-repo`.
+      Defaults to the workflow token, usually enough.
+    required: false
+    default: ${{ github.token }}
+
+  # What should be considered and rewritten.
+  go-mod-paths:
+    description: >-
+      Module directories to update and tidy, one per line or whitespace
+      separated (e.g. ". e2e tools actions/retest"). `auto` discovers every
+      go.mod outside vendor trees. Missing directories are skipped.
+    required: false
+    default: auto
+  vendor:
+    description: >-
+      `auto` vendors a module only when it already has a vendor directory,
+      `true` always vendors, `false` never does. Keep it auto, we don't have
+      vendor in csi repo api module.
+    required: false
+    default: auto
+  deps-update-command:
+    description: >-
+      Command run once from the repository root instead of the built-in
+      `go mod tidy` / `go mod vendor` (e.g. `make deps-update`). Handy in
+      ocs* repos.
+    required: false
+    default: ""
+  containerfiles:
+    description: >-
+      Dockerfiles/Containerfiles whose base image tag should follow the Go
+      version, one per line or whitespace separated. `auto` discovers
+      `Dockerfile*` and `Containerfile*` outside vendor trees, `none` disables
+      the rewrite. Only the major.minor part of the tag is written, so patch
+      bumps leave these files untouched.
+    required: false
+    default: auto
+  containerfile-image-prefixes:
+    description: >-
+      Image name prefixes rewritten inside the Containerfiles, one per line or
+      whitespace separated (e.g. `golang:` or
+      `registry.access.redhat.com/ubi9/go-toolset:`). This can be removed as an
+      input but it is optional anyways and some project might use a diff base (must-gather).
+      Always end with the colon else regex will fail :(.
+    required: false
+    default: "golang:"
+  version-files:
+    description: >-
+      Plain `KEY=value` files to keep in sync, one entry per line as
+      `<path>:<KEY>` or `<path>:<KEY>:minor` to write only major.minor
+      (e.g. `build.env:GOLANG_VERSION`). Can be used to update 
+      specific keys in our build.env(s).
+    required: false
+    default: ""
+  remove-toolchain:
+    description: Drop the `toolchain` directive from go.mod files.
+    required: false
+    default: "true"
+
+  # Commit and PR config.
+  head-branch-template:
+    description: >-
+      Name of the pushed branch. `{branch}` is the target branch. Keep it
+      stable per target so re-runs refresh one pull request instead of opening
+      duplicates.
+    required: false
+    default: chore/bump-go-{branch}
+  git-user-name:
+    description: Author/committer name for the generated commits.
+    required: false
+    default: "odf-bot"
+  git-user-email:
+    description: Author/committer email for the generated commits.
+    required: false
+    default: "odf-bot@users.noreply.github.com"
+  signoff:
+    description: Add a `Signed-off-by` trailer to the generated commits.
+    required: false
+    default: "true"
+  commit-message:
+    description: >-
+      Message of the version bump commit. Supports `{branch}`, `{from}`,
+      `{to}`, `{image}`. A blank line separates subject from body.
+    required: false
+    default: |
+      build: bump go from {from} to {to}
+
+      Align go.mod and related pins with the builder image.
+  deps-commit-message:
+    description: Message of the dependency refresh commit (same placeholders).
+    required: false
+    default: |
+      build: add go mod tidy/vendor changes
+
+      Refresh module checksums and vendor trees after the Go bump.
+  pr-title-template:
+    description: Pull request title for `default-branch` (same placeholders).
+    required: false
+    default: Bump go from {from} to {to}
+  release-pr-title-template:
+    description: Pull request title for release branches (same placeholders).
+    required: false
+    default: "NO-ISSUE: [{branch}] Bump go from {from} to {to}"
+  pr-body-template:
+    description: Pull request body (same placeholders).
+    required: false
+    default: |
+      Upgraded the Golang version of the repo.
+
+      - Latest version available in the builder image (`{image}`): `{to}`
+  pr-labels:
+    description: >-
+      Labels applied to newly created pull requests, one per line or comma
+      separated. Can/may contain spaces.
+    required: false
+    default: ""
+  draft:
+    description: Open the pull requests as drafts.
+    required: false
+    default: "false"
+
+  # ----------------------------------------------------------------- runtime
+  go-version:
+    description: >-
+      Bootstrap Go used to drive the module updates. The exact per-branch
+      toolchain is still fetched automatically when `gotoolchain` is `auto`.
+      Ideally, keep it stable, keep toolachain to auto and we should be good.
+    required: false
+    default: stable
+  setup-go:
+    description: Install Go with actions/setup-go. Disable to use the runner's Go.
+    required: false
+    default: "true"
+  gotoolchain:
+    description: >-
+      Value of GOTOOLCHAIN for the module updates. `auto` lets Go download the
+      toolchain matching each branch's new go directive; use `local` if the
+      runner must not fetch toolchains.
+    required: false
+    default: auto
+  dry-run:
+    description: >-
+      Do everything locally but skip the push and the pull request. The
+      resulting diff is printed to the log.
+    required: false
+    default: "false"
+  work-dir:
+    description: Directory used for the per-branch clones. Can be dropped from inputs as well.
+    required: false
+    default: ""
+
+outputs:
+  results:
+    description: >-
+      JSON array with one object per branch:
+      `{branch, status, current_go, target_go, pr}` where `status` is
+      `bumped`, `skipped`, `dry-run` or `failed`.
+    value: ${{ steps.bump.outputs.results }}
+  bumped:
+    description: Space separated list of branches that got a pull request.
+    value: ${{ steps.bump.outputs.bumped }}
+  failed:
+    description: Space separated list of branches that failed.
+    value: ${{ steps.bump.outputs.failed }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check prerequisites
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [[ "${RUNNER_OS}" != "Linux" ]]; then
+          echo "::error::go-patch-version only supports Linux runners" >&2
+          exit 1
+        fi
+        missing=()
+        for tool in git jq gh; do
+          command -v "${tool}" >/dev/null 2>&1 || missing+=("${tool}")
+        done
+        if [[ ${#missing[@]} -gt 0 ]]; then
+          echo "::error::missing required tools: ${missing[*]}" >&2
+          exit 1
+        fi
+
+    - name: Log in to the builder registry
+      if: inputs.registry-username != ''
+      shell: bash
+      env:
+        REGISTRY: ${{ inputs.registry }}
+        REGISTRY_USERNAME: ${{ inputs.registry-username }}
+        REGISTRY_PASSWORD: ${{ inputs.registry-password }}
+      run: |
+        set -euo pipefail
+        if ! command -v skopeo >/dev/null 2>&1; then
+          echo "::error::skopeo is required to probe the builder image" >&2
+          exit 1
+        fi
+        echo "${REGISTRY_PASSWORD}" | skopeo login "${REGISTRY}" \
+          --username "${REGISTRY_USERNAME}" --password-stdin
+
+    - name: Set up Go
+      if: inputs.setup-go == 'true'
+      # yamllint disable-line rule:line-length
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v6.3.0
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: false
+
+    # And off we go!
+    - name: Bump Go version
+      id: bump
+      shell: bash
+      env:
+        BRANCHES: ${{ inputs.branches }}
+        DEFAULT_GO_TAG: ${{ inputs.default-go-tag }}
+        FAIL_FAST: ${{ inputs.fail-fast }}
+        BUILDER_IMAGE_TEMPLATE: ${{ inputs.builder-image-template }}
+        IMAGE_VERSION_LABEL: ${{ inputs.image-version-label }}
+        TARGET_REPO: ${{ inputs.target-repo }}
+        FORK_REPO: ${{ inputs.fork-repo }}
+        DEFAULT_BRANCH: ${{ inputs.default-branch }}
+        PUSH_TOKEN: ${{ inputs.token }}
+        GH_TOKEN: ${{ inputs.pr-token }}
+        GO_MOD_PATHS: ${{ inputs.go-mod-paths }}
+        VENDOR: ${{ inputs.vendor }}
+        DEPS_UPDATE_COMMAND: ${{ inputs.deps-update-command }}
+        CONTAINERFILES: ${{ inputs.containerfiles }}
+        CONTAINERFILE_IMAGE_PREFIXES: ${{ inputs.containerfile-image-prefixes }}
+        VERSION_FILES: ${{ inputs.version-files }}
+        REMOVE_TOOLCHAIN: ${{ inputs.remove-toolchain }}
+        HEAD_BRANCH_TEMPLATE: ${{ inputs.head-branch-template }}
+        GIT_USER_NAME: ${{ inputs.git-user-name }}
+        GIT_USER_EMAIL: ${{ inputs.git-user-email }}
+        SIGNOFF: ${{ inputs.signoff }}
+        COMMIT_MESSAGE: ${{ inputs.commit-message }}
+        DEPS_COMMIT_MESSAGE: ${{ inputs.deps-commit-message }}
+        PR_TITLE_TEMPLATE: ${{ inputs.pr-title-template }}
+        RELEASE_PR_TITLE_TEMPLATE: ${{ inputs.release-pr-title-template }}
+        PR_BODY_TEMPLATE: ${{ inputs.pr-body-template }}
+        PR_LABELS: ${{ inputs.pr-labels }}
+        DRAFT: ${{ inputs.draft }}
+        GOTOOLCHAIN: ${{ inputs.gotoolchain }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        WORK_DIR: ${{ inputs.work-dir }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: bash "${ACTION_PATH}/scripts/run.sh"
