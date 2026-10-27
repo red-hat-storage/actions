@@ -18,7 +18,7 @@ name: Go patch version bump
 
 on:
   schedule:
-    - cron: "0 6 * * 1"   # every Monday at 06:00 UTC
+    - cron: "0 6 * * 1" # every Monday at 06:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -40,7 +40,7 @@ jobs:
             release-4.22:rhel_9_golang_1.25
 ```
 
-More complete, real-world workflows live in [`../examples`](../examples).
+More complete, real-world workflows live in [`examples`](./examples).
 
 ## Before you start
 
@@ -50,7 +50,7 @@ A few things the action expects:
 - **`git`, `jq` and `gh`** on the runner (all present on GitHub-hosted
   runners), plus **`skopeo`** if you let it read versions from a builder image.
 - **A token that can push.** Usually a PAT belonging to the bot that owns the
-  fork. It needs *Contents: write*, and also *Workflows: write* if the bump can
+  fork. It needs _Contents: write_, and also _Workflows: write_ if the bump can
   touch anything under `.github/workflows`.
 
 ## What it actually does, per branch
@@ -71,11 +71,11 @@ Every input is optional unless marked **required**.
 
 ### Which branches to bump
 
-| Input | Default | What it does |
-| --- | --- | --- |
-| `branches` | **required** | The branches to process, one per line. See below for the format. |
-| `default-go-tag` | *(empty)* | Fallback builder image tag (or `=x.y.z`) for branch entries that don't carry their own. |
-| `fail-fast` | `false` | Stop at the first branch that fails. By default the rest still get their turn. |
+| Input            | Default      | What it does                                                                            |
+| ---------------- | ------------ | --------------------------------------------------------------------------------------- |
+| `branches`       | **required** | The branches to process, one per line. See below for the format.                        |
+| `default-go-tag` | _(empty)_    | Fallback builder image tag (or `=x.y.z`) for branch entries that don't carry their own. |
+| `fail-fast`      | `false`      | Stop at the first branch that fails. By default the rest still get their turn.          |
 
 Each line of `branches` can take one of three shapes:
 
@@ -92,43 +92,43 @@ tag", and it skips the image lookup entirely.
 
 ### Where the version comes from
 
-| Input | Default | What it does |
-| --- | --- | --- |
-| `builder-image-template` | `brew.registry.redhat.io/rh-osbs/openshift-golang-builder:{tag}` | The image to inspect. `{tag}` is replaced with the branch's tag. |
-| `registry` | `brew.registry.redhat.io` | Registry to log in to before inspecting the image. |
-| `registry-username` | *(empty)* | Service account username. Leave empty to skip the login entirely. |
-| `registry-password` | *(empty)* | Password for that service account. |
-| `image-version-label` | `version` | The image label that holds the Go version. |
+| Input                    | Default                                                          | What it does                                                      |
+| ------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `builder-image-template` | `brew.registry.redhat.io/rh-osbs/openshift-golang-builder:{tag}` | The image to inspect. `{tag}` is replaced with the branch's tag.  |
+| `registry`               | `brew.registry.redhat.io`                                        | Registry to log in to before inspecting the image.                |
+| `registry-username`      | _(empty)_                                                        | Service account username. Leave empty to skip the login entirely. |
+| `registry-password`      | _(empty)_                                                        | Password for that service account.                                |
+| `image-version-label`    | `version`                                                        | The image label that holds the Go version.                        |
 
 A leading `v` on the label value is stripped, so both `1.26.1` and `v1.26.1`
 work fine.
 
 ### Repositories
 
-| Input | Default | What it does |
-| --- | --- | --- |
-| `target-repo` | the current repo | Where the pull requests are opened. |
-| `fork-repo` | *(empty)* | Fork that receives the bump branches. Leave it empty to push straight to `target-repo` — then `token` needs write access there. |
-| `default-branch` | the repo's default branch | Which branch counts as "main". It gets `pr-title-template`; everything else gets `release-pr-title-template`. |
+| Input            | Default                   | What it does                                                                                                                    |
+| ---------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `target-repo`    | the current repo          | Where the pull requests are opened.                                                                                             |
+| `fork-repo`      | _(empty)_                 | Fork that receives the bump branches. Leave it empty to push straight to `target-repo` — then `token` needs write access there. |
+| `default-branch` | the repo's default branch | Which branch counts as "main". It gets `pr-title-template`; everything else gets `release-pr-title-template`.                   |
 
 ### Tokens
 
-| Input | Default | What it does |
-| --- | --- | --- |
-| `token` | **required** | Pushes the bump branch. Needs *Contents: write* (plus *Workflows: write* if `.github/workflows` may change). Usually the bot's PAT. |
-| `pr-token` | `${{ github.token }}` | Creates and updates the pull requests on `target-repo`. The default is normally enough. |
+| Input      | Default               | What it does                                                                                                                        |
+| ---------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `token`    | **required**          | Pushes the bump branch. Needs _Contents: write_ (plus _Workflows: write_ if `.github/workflows` may change). Usually the bot's PAT. |
+| `pr-token` | `${{ github.token }}` | Creates and updates the pull requests on `target-repo`. The default is normally enough.                                             |
 
 ### What gets rewritten
 
-| Input | Default | What it does |
-| --- | --- | --- |
-| `go-mod-paths` | `auto` | Module directories to update and tidy, e.g. `. e2e tools actions/retest`. `auto` finds every `go.mod` outside vendor trees. Directories that don't exist are skipped quietly. |
-| `vendor` | `auto` | `auto` vendors a module only if it already has a `vendor/` directory, `true` always vendors, `false` never does. `auto` is the safe choice when some modules are vendored and others aren't. |
-| `deps-update-command` | *(empty)* | Run this from the repo root instead of the built-in tidy/vendor, e.g. `make deps-update`. |
-| `containerfiles` | `auto` | Dockerfiles/Containerfiles whose base image tag should follow the Go version. `auto` finds `Dockerfile*` and `Containerfile*` outside vendor trees, `none` turns the rewrite off. |
-| `containerfile-image-prefixes` | `golang:` | Image name prefixes to rewrite inside those files, e.g. `registry.access.redhat.com/ubi9/go-toolset:`. Always end with the colon. |
-| `version-files` | *(empty)* | Plain `KEY=value` files to keep in sync. One entry per line as `<path>:<KEY>`, or `<path>:<KEY>:minor` to write only `major.minor`. Example: `build.env:GOLANG_VERSION`. |
-| `remove-toolchain` | `true` | Drop the `toolchain` directive from `go.mod` files. |
+| Input                          | Default   | What it does                                                                                                                                                                                 |
+| ------------------------------ | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `go-mod-paths`                 | `auto`    | Module directories to update and tidy, e.g. `. e2e tools actions/retest`. `auto` finds every `go.mod` outside vendor trees. Directories that don't exist are skipped quietly.                |
+| `vendor`                       | `auto`    | `auto` vendors a module only if it already has a `vendor/` directory, `true` always vendors, `false` never does. `auto` is the safe choice when some modules are vendored and others aren't. |
+| `deps-update-command`          | _(empty)_ | Run this from the repo root instead of the built-in tidy/vendor, e.g. `make deps-update`.                                                                                                    |
+| `containerfiles`               | `auto`    | Dockerfiles/Containerfiles whose base image tag should follow the Go version. `auto` finds `Dockerfile*` and `Containerfile*` outside vendor trees, `none` turns the rewrite off.            |
+| `containerfile-image-prefixes` | `golang:` | Image name prefixes to rewrite inside those files, e.g. `registry.access.redhat.com/ubi9/go-toolset:`. Always end with the colon.                                                            |
+| `version-files`                | _(empty)_ | Plain `KEY=value` files to keep in sync. One entry per line as `<path>:<KEY>`, or `<path>:<KEY>:minor` to write only `major.minor`. Example: `build.env:GOLANG_VERSION`.                     |
+| `remove-toolchain`             | `true`    | Drop the `toolchain` directive from `go.mod` files.                                                                                                                                          |
 
 Note on Containerfiles: only the `major.minor` part of the tag is written
 (`golang:1.26`), because that's how the builder images are tagged. A pure patch
@@ -136,51 +136,51 @@ bump therefore leaves these files untouched.
 
 ### Commits and pull requests
 
-| Input | Default | What it does |
-| --- | --- | --- |
-| `head-branch-template` | `chore/bump-go-{branch}` | Name of the pushed branch. Keep it stable per target branch so re-runs refresh one pull request instead of opening duplicates. |
-| `git-user-name` | `odf-bot` | Commit author/committer name. |
-| `git-user-email` | `odf-bot@users.noreply.github.com` | Commit author/committer email. |
-| `signoff` | `true` | Add a `Signed-off-by` trailer. |
-| `commit-message` | `build: bump go from {from} to {to}` (+ body) | Message for the version bump commit. First line is the subject, then a blank line, then the body. |
-| `deps-commit-message` | `build: add go mod tidy/vendor changes` (+ body) | Message for the dependency refresh commit. |
-| `pr-title-template` | `Bump go from {from} to {to}` | Pull request title on the default branch. |
-| `release-pr-title-template` | `NO-ISSUE: [{branch}] Bump go from {from} to {to}` | Pull request title on every other branch. |
-| `pr-body-template` | see `action.yml` | Pull request body. |
-| `pr-labels` | *(empty)* | Labels for newly created pull requests, one per line or comma separated. Labels may contain spaces. Only applied when the pull request is created, not on refreshes. |
-| `draft` | `false` | Open the pull requests as drafts. |
+| Input                       | Default                                            | What it does                                                                                                                                                         |
+| --------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `head-branch-template`      | `chore/bump-go-{branch}`                           | Name of the pushed branch. Keep it stable per target branch so re-runs refresh one pull request instead of opening duplicates.                                       |
+| `git-user-name`             | `odf-bot`                                          | Commit author/committer name.                                                                                                                                        |
+| `git-user-email`            | `odf-bot@users.noreply.github.com`                 | Commit author/committer email.                                                                                                                                       |
+| `signoff`                   | `true`                                             | Add a `Signed-off-by` trailer.                                                                                                                                       |
+| `commit-message`            | `build: bump go from {from} to {to}` (+ body)      | Message for the version bump commit. First line is the subject, then a blank line, then the body.                                                                    |
+| `deps-commit-message`       | `build: add go mod tidy/vendor changes` (+ body)   | Message for the dependency refresh commit.                                                                                                                           |
+| `pr-title-template`         | `Bump go from {from} to {to}`                      | Pull request title on the default branch.                                                                                                                            |
+| `release-pr-title-template` | `NO-ISSUE: [{branch}] Bump go from {from} to {to}` | Pull request title on every other branch.                                                                                                                            |
+| `pr-body-template`          | see `action.yml`                                   | Pull request body.                                                                                                                                                   |
+| `pr-labels`                 | _(empty)_                                          | Labels for newly created pull requests, one per line or comma separated. Labels may contain spaces. Only applied when the pull request is created, not on refreshes. |
+| `draft`                     | `false`                                            | Open the pull requests as drafts.                                                                                                                                    |
 
 All of the message and title templates understand these placeholders:
 
-| Placeholder | Becomes |
-| --- | --- |
-| `{branch}` | The branch being bumped, e.g. `release-4.22` |
-| `{from}` | The current Go version, e.g. `1.25.1` |
-| `{to}` | The new Go version, e.g. `1.25.3` |
-| `{to_minor}` | The new version without the patch, e.g. `1.25` |
-| `{image}` | The builder image that was probed, or `pinned version x.y.z` |
-| `{repo}` | The target repository, e.g. `red-hat-storage/ceph-csi` |
-| `{default_branch}` | The value of `default-branch` |
+| Placeholder        | Becomes                                                      |
+| ------------------ | ------------------------------------------------------------ |
+| `{branch}`         | The branch being bumped, e.g. `release-4.22`                 |
+| `{from}`           | The current Go version, e.g. `1.25.1`                        |
+| `{to}`             | The new Go version, e.g. `1.25.3`                            |
+| `{to_minor}`       | The new version without the patch, e.g. `1.25`               |
+| `{image}`          | The builder image that was probed, or `pinned version x.y.z` |
+| `{repo}`           | The target repository, e.g. `red-hat-storage/ceph-csi`       |
+| `{default_branch}` | The value of `default-branch`                                |
 
 ### Runtime
 
-| Input | Default | What it does |
-| --- | --- | --- |
-| `go-version` | `stable` | The bootstrap Go used to drive the module updates. The exact per-branch toolchain is still fetched automatically when `gotoolchain` is `auto`, so leaving this alone is usually right. |
-| `setup-go` | `true` | Install Go with `actions/setup-go`. Set to `false` to use whatever Go the runner already has. |
-| `gotoolchain` | `auto` | Value of `GOTOOLCHAIN`. `auto` lets Go download the toolchain matching each branch's new `go` directive; use `local` if the runner must not download toolchains. |
-| `dry-run` | `false` | Do all the work locally but skip the push and the pull request. The resulting diff is printed to the log — great for a first try. |
-| `work-dir` | *(empty)* | Directory for the per-branch clones. Defaults to a temp directory under the runner. |
+| Input         | Default   | What it does                                                                                                                                                                           |
+| ------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `go-version`  | `stable`  | The bootstrap Go used to drive the module updates. The exact per-branch toolchain is still fetched automatically when `gotoolchain` is `auto`, so leaving this alone is usually right. |
+| `setup-go`    | `true`    | Install Go with `actions/setup-go`. Set to `false` to use whatever Go the runner already has.                                                                                          |
+| `gotoolchain` | `auto`    | Value of `GOTOOLCHAIN`. `auto` lets Go download the toolchain matching each branch's new `go` directive; use `local` if the runner must not download toolchains.                       |
+| `dry-run`     | `false`   | Do all the work locally but skip the push and the pull request. The resulting diff is printed to the log — great for a first try.                                                      |
+| `work-dir`    | _(empty)_ | Directory for the per-branch clones. Defaults to a temp directory under the runner.                                                                                                    |
 
 Boolean inputs accept `true`, `yes` or `1` as "on"; anything else is off.
 
 ## Outputs
 
-| Output | What you get |
-| --- | --- |
+| Output    | What you get                                                                                                                                    |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `results` | A JSON array with one object per branch: `{branch, status, current_go, target_go, pr}`. `status` is `bumped`, `skipped`, `dry-run` or `failed`. |
-| `bumped` | Space separated list of branches that got a pull request. |
-| `failed` | Space separated list of branches that failed. |
+| `bumped`  | Space separated list of branches that got a pull request.                                                                                       |
+| `failed`  | Space separated list of branches that failed.                                                                                                   |
 
 The action also writes a small table to the job summary, so you can see at a
 glance what happened without digging through the log.

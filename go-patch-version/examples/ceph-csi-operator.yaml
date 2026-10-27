@@ -1,0 +1,49 @@
+---
+# Weekly Go patch version bump for red-hat-storage/ceph-csi-operator.
+#
+# Required repository secrets:
+#   REDHAT_REGISTRY_USER     - registry.redhat.io service account username
+#   REDHAT_REGISTRY_PASSWORD - password for that service account
+#   GH_PAT                   - PAT with Contents + Workflows (R/W) on
+#                              odf-bot/ceph-csi-operator.
+name: Go patch version bump
+
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    # Weekly on Monday at 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: go-patch-version-bump
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    if: github.repository == 'red-hat-storage/ceph-csi-operator'
+    steps:
+      - name: Go patch version bump
+        # yamllint disable-line rule:line-length
+        uses: red-hat-storage/actions/go-patch-version@v1
+        with:
+          token: ${{ secrets.GH_PAT }}
+          registry-username: ${{ secrets.REDHAT_REGISTRY_USER }}
+          registry-password: ${{ secrets.REDHAT_REGISTRY_PASSWORD }}
+          fork-repo: odf-bot/ceph-csi-operator
+          branches: |
+            main:rhel_9_golang_1.26
+            release-5.0:rhel_9_golang_1.26
+            release-4.22:rhel_9_golang_1.25
+            release-4.21:rhel_9_golang_1.25
+            release-4.20:rhel_9_golang_1.25
+            release-4.19:rhel_9_golang_1.25
+            release-4.18:rhel_9_golang_1.25
+          # `api` has no vendor directory, so `vendor: auto` tidies it only.
+          go-mod-paths: . api
+          containerfiles: Dockerfile

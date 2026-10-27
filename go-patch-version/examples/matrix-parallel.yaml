@@ -1,0 +1,41 @@
+---
+name: Go patch version bump
+
+# yamllint disable-line rule:truthy
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: go-patch-version-bump
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  bump:
+    name: bump (${{ matrix.branch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - branch: main
+            tag: rhel_9_golang_1.26
+          - branch: release-4.22
+            tag: rhel_9_golang_1.25
+          - branch: release-4.18
+            tag: rhel_9_golang_1.24
+    steps:
+      - name: Go patch version bump
+        # yamllint disable-line rule:line-length
+        uses: red-hat-storage/actions/go-patch-version@v1
+        with:
+          token: ${{ secrets.GH_PAT }}
+          registry-username: ${{ secrets.REDHAT_REGISTRY_USER }}
+          registry-password: ${{ secrets.REDHAT_REGISTRY_PASSWORD }}
+          fork-repo: odf-bot/my-repo
+          branches: ${{ matrix.branch }}:${{ matrix.tag }}
