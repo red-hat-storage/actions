@@ -140,7 +140,7 @@ inputs:
     description: >-
       Plain `KEY=value` files to keep in sync, one entry per line as
       `<path>:<KEY>` or `<path>:<KEY>:minor` to write only major.minor
-      (e.g. `build.env:GOLANG_VERSION`). Can be used to update 
+      (e.g. `build.env:GOLANG_VERSION`). Can be used to update
       specific keys in our build.env(s).
     required: false
     default: ""
@@ -211,7 +211,7 @@ inputs:
     required: false
     default: "false"
 
-  # ----------------------------------------------------------------- runtime
+  # Runtime config
   go-version:
     description: >-
       Bootstrap Go used to drive the module updates. The exact per-branch
